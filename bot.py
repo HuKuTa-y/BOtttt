@@ -53,7 +53,7 @@ formatter = logging.Formatter(
     "[%(asctime)s] [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
-
+LOG_GROUP_ID = -5564429537
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(formatter)
@@ -89,6 +89,17 @@ def log_action(user, action: str, details: str = "", chat_type: str = "private",
             f"DETAILS: {details}"
         )
         logger.info(log_msg)
+
+        # 🔥 ОТПРАВКА В TELEGRAM-ГРУППУ
+        try:
+            bot.send_message(LOG_GROUP_ID, log_msg)
+        except Exception as e:
+            logger.error(f"Ошибка отправки лога в группу: {e}")
+
+        # 🔥 СОХРАНЕНИЕ В ФАЙЛ
+        user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Аноним"
+        save_user_log(user.id, user_name, action, details, time_now)
+
     except Exception as e:
         logger.error(f"Ошибка при логировании действия: {e}")
 
@@ -195,6 +206,38 @@ def save_gn_data(data):
     except Exception as e:
         print(f"❌ ОШИБКА СОХРАНЕНИЯ ФАЙЛА: {e}")
 
+
+# ==================== СОХРАНЕНИЕ ЛОГОВ В ФАЙЛ ====================
+LOGS_FILE = "user_logs.json"
+
+
+def save_user_log(user_id, user_name, action, details, timestamp):
+    """Сохраняет лог в JSON файл."""
+    try:
+        # Загружаем существующие логи
+        if os.path.exists(LOGS_FILE):
+            with open(LOGS_FILE, "r", encoding="utf-8") as f:
+                logs = json.load(f)
+        else:
+            logs = []
+
+        # Добавляем новый лог
+        log_entry = {
+            "user_id": user_id,
+            "user_name": user_name,
+            "action": action,
+            "details": details,
+            "timestamp": timestamp
+        }
+        logs.append(log_entry)
+
+        # Сохраняем обратно
+        with open(LOGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(logs, f, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        logger.error(f"Ошибка сохранения лога в файл: {e}")
+
 # ==================== КОМАНДЫ ====================
 
 
@@ -214,6 +257,20 @@ def cmd_start(message):
         reply_markup=get_main_menu()
     )
 
+
+@bot.message_handler(commands=["download_logs"])
+def cmd_download_logs(message):
+    """Отправляет файл с логами."""
+    # Проверка, что это ты (замени на свой ID)
+    if message.from_user.id != 123456789:  # ← ТВОЙ ID
+        bot.send_message(message.chat.id, "⛔ Доступ запрещен.")
+        return
+
+    if os.path.exists(LOGS_FILE):
+        with open(LOGS_FILE, "rb") as f:
+            bot.send_document(message.chat.id, f, caption="📊 Логи бота")
+    else:
+        bot.send_message(message.chat.id, "❌ Файл логов не найден.")
 
 @bot.message_handler(commands=["facts"])
 def cmd_facts(message):
